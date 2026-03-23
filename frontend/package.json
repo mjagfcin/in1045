@@ -1,0 +1,38 @@
+{
+  "name": "sistema-provas-frontend",
+  "version": "1.0.0",
+  "description": "Frontend do Sistema de Gerenciamento de Provas",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.16.0",
+    "axios": "^1.5.0",
+    "react-hook-form": "^7.48.0",
+    "zod": "^3.22.2",
+    "@hookform/resolvers": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.26",
+    "@types/react-dom": "^18.2.11",
+    "@types/node": "^20.8.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.1.0",
+    "tailwindcss": "^3.3.3",
+    "postcss": "^8.4.31",
+    "autoprefixer": "^10.4.16",
+    "@typescript-eslint/eslint-plugin": "^6.8.0",
+    "@typescript-eslint/parser": "^6.8.0",
+    "eslint": "^8.51.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0"
+  }
+}
