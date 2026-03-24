@@ -1,92 +1,51 @@
-import mongoose from 'mongoose';
+import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = 'mongodb://localhost:27017/provas_db';
+const MONGODB_URI = 'mongodb://localhost:27017';
+const DB_NAME = 'provas_db';
 
 async function initDatabase() {
+  const client = new MongoClient(MONGODB_URI);
+
   try {
     console.log('Conectando ao MongoDB...');
-    await mongoose.connect(MONGODB_URI, {
-      retryWrites: false,
-      w: 'majority'
-    });
-    
-    const db = mongoose.connection;
+    await client.connect();
     console.log('✓ Conexão estabelecida\n');
 
-    // Coleções e seus esquemas
+    const db = client.db(DB_NAME);
+
+    // Definir coleções a criar
     const collections = [
       {
         name: 'questoes',
-        schema: {
-          disciplina: String,
-          professor: String,
-          texto: String,
-          alternativas: [{
-            letra: String,
-            texto: String,
-            correta: Boolean
-          }],
-          criado_em: { type: Date, default: Date.now }
-        },
         indexes: [
-          { texto: 'text' },
-          { disciplina: 1, professor: 1 }
+          { key: { texto: 'text' } },
+          { key: { disciplina: 1, professor: 1 } }
         ]
       },
       {
         name: 'provas',
-        schema: {
-          titulo: String,
-          disciplina: String,
-          professor: String,
-          questoes: [mongoose.Schema.Types.ObjectId],
-          data_criacao: { type: Date, default: Date.now }
-        },
         indexes: [
-          { professor: 1, data_criacao: -1 },
-          { disciplina: 1 }
+          { key: { professor: 1, data_criacao: -1 } },
+          { key: { disciplina: 1 } }
         ]
       },
       {
         name: 'provas_geradas',
-        schema: {
-          id_prova: mongoose.Schema.Types.ObjectId,
-          numero: Number,
-          ordem_questoes: [Number],
-          ordem_alternativas: [[Number]],
-          data_geracao: { type: Date, default: Date.now }
-        },
         indexes: [
-          { id_prova: 1, data_geracao: -1 }
+          { key: { id_prova: 1, data_geracao: -1 } }
         ]
       },
       {
         name: 'resultados_provas',
-        schema: {
-          id_prova_gerada: mongoose.Schema.Types.ObjectId,
-          id_aluno: String,
-          respostas: [String],
-          modo_correcao: String,
-          nota_final: Number,
-          data_correcao: { type: Date, default: Date.now }
-        },
         indexes: [
-          { id_prova_gerada: 1, id_aluno: 1 },
-          { data_correcao: -1 }
+          { key: { id_prova_gerada: 1, id_aluno: 1 } },
+          { key: { data_correcao: -1 } }
         ]
       },
       {
         name: 'relatorios',
-        schema: {
-          id_prova: mongoose.Schema.Types.ObjectId,
-          media: Number,
-          desvio_padrao: Number,
-          taxa_aprovacao: Number,
-          total_alunos: Number,
-          data_criacao: { type: Date, default: Date.now }
-        },
         indexes: [
-          { id_prova: 1, data_criacao: -1 }
+          { key: { id_prova: 1, data_criacao: -1 } }
         ]
       }
     ];
@@ -95,41 +54,48 @@ async function initDatabase() {
 
     for (const col of collections) {
       try {
-        // Criar coleção
-        await db.createCollection(col.name);
-        console.log(`✓ Coleção '${col.name}' criada`);
+        // Verificar se coleção já existe
+        const existing = await db.listCollections({ name: col.name }).toArray();
+        
+        if (existing.length === 0) {
+          // Criar coleção
+          await db.createCollection(col.name);
+          console.log(`✓ Coleção '${col.name}' criada`);
+        } else {
+          console.log(`✓ Coleção '${col.name}' já existe`);
+        }
 
         // Criar índices
         const collection = db.collection(col.name);
         if (col.indexes) {
-          for (const index of col.indexes) {
+          for (const indexSpec of col.indexes) {
             try {
-              await collection.createIndex(index);
+              await collection.createIndex(indexSpec.key);
             } catch (e) {
               // Índice pode já existir
             }
           }
         }
       } catch (error) {
-        if (error.message.includes('already exists')) {
-          console.log(`✓ Coleção '${col.name}' já existe`);
-        } else {
-          throw error;
-        }
+        console.error(`✗ Erro ao processar '${col.name}':`, error.message);
+        throw error;
       }
     }
 
     console.log('\n✓ Banco de dados inicializado com sucesso!\n');
     console.log('Coleções criadas:');
     collections.forEach(col => console.log(`  • ${col.name}`));
-
-    await mongoose.disconnect();
-    console.log('\n✓ Desconectado\n');
     
+    console.log('\n✓ Banco: provas_db');
+    console.log('✓ URL: mongodb://localhost:27017/provas_db\n');
+
   } catch (error) {
     console.error('✗ Erro:', error.message);
     console.error('\nVerifique se MongoDB está rodando em mongodb://localhost:27017');
     process.exit(1);
+  } finally {
+    await client.close();
+    console.log('✓ Desconectado\n');
   }
 }
 
