@@ -33,7 +33,7 @@ After(async () => {
 // Questões - CRUD Steps
 
 Given('que não existem questões no banco de dados', async () => {
-  const response = await apiClient.get('/questoes?pagina=1&limite=100');
+  await apiClient.get('/questoes?pagina=1&limite=100');
   // This is a setup assumption; in real scenario might need to cleanup
 });
 

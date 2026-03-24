@@ -262,7 +262,7 @@ Then('o resultado deve conter:', (dataTable: DataTable) => {
   const dados = dataTable.rowsHash();
   const resultado = testContext.response.data.dados;
   
-  Object.entries(dados).forEach(([chave, valor]) => {
+  Object.entries(dados).forEach(([chave]) => {
     if (!(chave in resultado)) {
       throw new Error(`Campo faltando no resultado: ${chave}`);
     }

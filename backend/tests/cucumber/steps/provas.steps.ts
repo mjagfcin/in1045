@@ -1,4 +1,4 @@
-import { Given, When, Then, DataTable, Before, After } from '@cucumber/cucumber';
+import { When, Then, DataTable, Before, After } from '@cucumber/cucumber';
 import axios, { AxiosInstance } from 'axios';
 
 let apiClient: AxiosInstance;

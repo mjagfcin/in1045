@@ -64,7 +64,7 @@ Then('{int} PDFs devem ser gerados com sucesso', (quantidade: number) => {
   }
 });
 
-Then('cada PDF deve ter um identificador único no formato {string}', (formato: string) => {
+Then('cada PDF deve ter um identificador único no formato {string}', () => {
   const pattern = /prova_\d{3}_\d{3}/;
   
   testContext.pdfGerados.forEach((arquivo: any) => {
@@ -111,9 +111,7 @@ Then('cada alternativa deve variar de posição por PDF', () => {
   return;
 });
 
-Then('o cabeçalho deve conter:', (dataTable: any) => {
-  const dados = dataTable.rowsHash();
-  
+Then('o cabeçalho deve conter:', () => {
   // In real scenario, would extract PDF content and verify
   // This checks the response metadata
   const metadata = testContext.response.data.dados;
@@ -145,9 +143,9 @@ Then('deve haver espaço para resposta em modo {string}', (modo: string) => {
 });
 
 Then('deve haver seção de identificação ao final do PDF com campos:', (dataTable: any) => {
-  const dados = dataTable.rowsHash();
+  const campos = dataTable.rowsHash();
   
-  if (!dados.Nome || !dados.CPF) {
+  if (!campos.Nome || !campos.CPF) {
     throw new Error('Campos de identificação incompletos');
   }
 });
@@ -172,8 +170,7 @@ Then('um CSV com gabarito deve ser gerado', () => {
   }
 });
 
-Then('o CSV deve conter as colunas:', (dataTable: any) => {
-  const dados = dataTable.rowsHash();
+Then('o CSV deve conter as colunas:', () => {
   const headers = Object.keys(testContext.gabarito[0] || {});
   
   if (!headers.includes('numero_prova')) {

@@ -1,6 +1,5 @@
 import { Prova, IProva, IQuestaoProva } from '../models/Prova';
 import logger from '../config/logger';
-import { Types } from 'mongoose';
 
 interface CreateProvaDTO {
   titulo: string;
