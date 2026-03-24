@@ -107,3 +107,18 @@ export const provaService = {
       method: 'DELETE',
     }),
 };
+
+// Serviço de PDF
+export const pdfService = {
+  gerarPDFs: (provaId: string, quantidade: number) =>
+    fazerRequisicao<IResponseAPI<{ arquivos: string[] }>>('/pdf/gerar', {
+      method: 'POST',
+      body: { provaId, quantidade },
+    }),
+
+  gerarGabarito: (gabaritos: any) =>
+    fazerRequisicao<IResponseAPI<{ arquivo: string }>>('/pdf/gabarito', {
+      method: 'POST',
+      body: { gabaritos },
+    }),
+};

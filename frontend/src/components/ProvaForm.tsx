@@ -3,12 +3,14 @@ import { IProva, IQuestao } from '../types/index';
 import { questaoService } from '../services/api';
 
 interface ProvaFormProps {
-  onSubmit: (dados: Omit<IProva, '_id' | 'dataCriacao'>) => Promise<void>;
+  provaAtual?: IProva;
+  onSubmit: (dados: Omit<IProva, '_id' | 'dataCriacao'>, id?: string) => Promise<void>;
   onCancel: () => void;
   carregando?: boolean;
 }
 
 export const ProvaForm: React.FC<ProvaFormProps> = ({ 
+  provaAtual,
   onSubmit, 
   onCancel, 
   carregando = false 
@@ -24,8 +26,16 @@ export const ProvaForm: React.FC<ProvaFormProps> = ({
   const [erro, setErro] = useState('');
 
   useEffect(() => {
+    if (provaAtual) {
+      setTitulo(provaAtual.titulo);
+      setDisciplina(provaAtual.disciplina);
+      setProfessor(provaAtual.professor);
+      setDataProva(provaAtual.dataProva?.split('T')[0] || '');
+      setEsquemaAlternativas(provaAtual.esquemaAlternativas?.tipo || 'letras');
+      setQuestoesSelecionadas(provaAtual.questoes?.map(q => q.idQuestao) || []);
+    }
     carregarQuestoes();
-  }, []);
+  }, [provaAtual]);
 
   const carregarQuestoes = async () => {
     try {
@@ -77,21 +87,24 @@ export const ProvaForm: React.FC<ProvaFormProps> = ({
     }
 
     try {
-      await onSubmit({
-        titulo,
-        disciplina,
-        professor,
-        dataProva,
-        questoes: questoesSelecionadas.map((id, index) => ({
-          idQuestao: id,
-          ordem: index + 1,
-        })),
-        esquemaAlternativas: {
-          tipo: esquemaAlternativas,
+      await onSubmit(
+        {
+          titulo,
+          disciplina,
+          professor,
+          dataProva,
+          questoes: questoesSelecionadas.map((id, index) => ({
+            idQuestao: id,
+            ordem: index + 1,
+          })),
+          esquemaAlternativas: {
+            tipo: esquemaAlternativas,
+          },
         },
-      });
+        provaAtual?._id
+      );
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao criar prova');
+      setErro(err instanceof Error ? err.message : 'Erro ao salvar prova');
     }
   };
 

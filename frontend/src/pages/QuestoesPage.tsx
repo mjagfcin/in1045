@@ -11,6 +11,7 @@ export default function QuestoesPage() {
   const [erro, setErro] = useState('')
   const [mensagemSucesso, setMensagemSucesso] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
+  const [questaoEditando, setQuestaoEditando] = useState<IQuestao | null>(null)
 
   useEffect(() => {
     carregarQuestoes()
@@ -29,17 +30,24 @@ export default function QuestoesPage() {
     }
   }
 
-  const handleCriarQuestao = async (dados: Omit<IQuestao, '_id' | 'dataCriacao'>) => {
+  const handleSalvarQuestao = async (dados: Omit<IQuestao, '_id' | 'dataCriacao'>, id?: string) => {
     setCarregandoOperacao(true)
     setErro('')
     try {
-      const response = await questaoService.criar(dados)
-      setQuestoes([...questoes, response.dados])
+      if (id) {
+        const response = await questaoService.atualizar(id, dados)
+        setQuestoes(questoes.map(q => (q._id === id ? response.dados : q)))
+        setMensagemSucesso('Questão atualizada com sucesso!')
+      } else {
+        const response = await questaoService.criar(dados)
+        setQuestoes([...questoes, response.dados])
+        setMensagemSucesso('Questão criada com sucesso!')
+      }
       setModalAberto(false)
-      setMensagemSucesso('Questão criada com sucesso!')
+      setQuestaoEditando(null)
       setTimeout(() => setMensagemSucesso(''), 3000)
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao criar questão')
+      setErro(err instanceof Error ? err.message : 'Erro ao salvar questão')
     } finally {
       setCarregandoOperacao(false)
     }
@@ -142,6 +150,16 @@ export default function QuestoesPage() {
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <button 
+                      onClick={() => {
+                        setQuestaoEditando(questao)
+                        setModalAberto(true)
+                      }}
+                      disabled={carregandoOperacao}
+                      className="text-blue-600 hover:underline mr-4 disabled:opacity-50"
+                    >
+                      Editar
+                    </button>
+                    <button 
                       onClick={() => handleDeletarQuestao(questao._id)}
                       disabled={carregandoOperacao}
                       className="text-red-600 hover:underline disabled:opacity-50"
@@ -158,12 +176,19 @@ export default function QuestoesPage() {
 
       <Modal
         isOpen={modalAberto}
-        titulo="Criar Nova Questão"
-        onClose={() => setModalAberto(false)}
+        titulo={questaoEditando ? 'Editar Questão' : 'Criar Nova Questão'}
+        onClose={() => {
+          setModalAberto(false)
+          setQuestaoEditando(null)
+        }}
       >
         <QuestaoForm
-          onSubmit={handleCriarQuestao}
-          onCancel={() => setModalAberto(false)}
+          questaoAtual={questaoEditando || undefined}
+          onSubmit={handleSalvarQuestao}
+          onCancel={() => {
+            setModalAberto(false)
+            setQuestaoEditando(null)
+          }}
           carregando={carregandoOperacao}
         />
       </Modal>

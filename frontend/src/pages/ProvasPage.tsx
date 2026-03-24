@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { IProva } from '../types/index'
-import { provaService } from '../services/api'
+import { provaService, pdfService } from '../services/api'
 import { Modal } from '../components/Modal'
 import { ProvaForm } from '../components/ProvaForm'
 
@@ -11,6 +11,7 @@ export default function ProvasPage() {
   const [erro, setErro] = useState('')
   const [mensagemSucesso, setMensagemSucesso] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
+  const [provaEditando, setProvaEditando] = useState<IProva | null>(null)
 
   useEffect(() => {
     carregarProvas()
@@ -29,17 +30,24 @@ export default function ProvasPage() {
     }
   }
 
-  const handleCriarProva = async (dados: Omit<IProva, '_id' | 'dataCriacao'>) => {
+  const handleSalvarProva = async (dados: Omit<IProva, '_id' | 'dataCriacao'>, id?: string) => {
     setCarregandoOperacao(true)
     setErro('')
     try {
-      const response = await provaService.criar(dados)
-      setProvas([...provas, response.dados])
+      if (id) {
+        const response = await provaService.atualizar(id, dados)
+        setProvas(provas.map(p => (p._id === id ? response.dados : p)))
+        setMensagemSucesso('Prova atualizada com sucesso!')
+      } else {
+        const response = await provaService.criar(dados)
+        setProvas([...provas, response.dados])
+        setMensagemSucesso('Prova criada com sucesso!')
+      }
       setModalAberto(false)
-      setMensagemSucesso('Prova criada com sucesso!')
+      setProvaEditando(null)
       setTimeout(() => setMensagemSucesso(''), 3000)
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao criar prova')
+      setErro(err instanceof Error ? err.message : 'Erro ao salvar prova')
     } finally {
       setCarregandoOperacao(false)
     }
@@ -137,7 +145,33 @@ export default function ProvasPage() {
                     {prova.questoes?.length || 0}
                   </td>
                   <td className="px-6 py-4 text-sm space-x-2">
+                    <button
+                      onClick={() => {
+                        setProvaEditando(prova)
+                        setModalAberto(true)
+                      }}
+                      disabled={carregandoOperacao}
+                      className="text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      Editar
+                    </button>
                     <button 
+                      onClick={async () => {
+                        const quantidade = Number(prompt('Digite a quantidade de PDFs a gerar:', '30'))
+                        if (!quantidade || quantidade <= 0) {
+                          alert('Quantidade inválida');
+                          return
+                        }
+                        try {
+                          setCarregandoOperacao(true)
+                          const result = await pdfService.gerarPDFs(prova._id || '', quantidade)
+                          setMensagemSucesso(`${result.mensagem}`)
+                        } catch (err) {
+                          setErro(err instanceof Error ? err.message : 'Erro ao gerar PDFs')
+                        } finally {
+                          setCarregandoOperacao(false)
+                        }
+                      }}
                       disabled={carregandoOperacao}
                       className="text-purple-600 hover:underline disabled:opacity-50"
                     >
@@ -160,12 +194,19 @@ export default function ProvasPage() {
 
       <Modal
         isOpen={modalAberto}
-        titulo="Criar Nova Prova"
-        onClose={() => setModalAberto(false)}
+        titulo={provaEditando ? 'Editar Prova' : 'Criar Nova Prova'}
+        onClose={() => {
+          setModalAberto(false)
+          setProvaEditando(null)
+        }}
       >
         <ProvaForm
-          onSubmit={handleCriarProva}
-          onCancel={() => setModalAberto(false)}
+          provaAtual={provaEditando || undefined}
+          onSubmit={handleSalvarProva}
+          onCancel={() => {
+            setModalAberto(false)
+            setProvaEditando(null)
+          }}
           carregando={carregandoOperacao}
         />
       </Modal>

@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IQuestao, IAlternativa } from '../types/index';
 
 interface QuestaoFormProps {
-  onSubmit: (dados: Omit<IQuestao, '_id' | 'dataCriacao'>) => Promise<void>;
+  questaoAtual?: IQuestao;
+  onSubmit: (dados: Omit<IQuestao, '_id' | 'dataCriacao'>, id?: string) => Promise<void>;
   onCancel: () => void;
   carregando?: boolean;
 }
 
 export const QuestaoForm: React.FC<QuestaoFormProps> = ({ 
+  questaoAtual,
   onSubmit, 
   onCancel, 
   carregando = false 
 }) => {
-  const [enunciado, setEnunciado] = useState('');
-  const [disciplina, setDisciplina] = useState('');
-  const [professor, setProfessor] = useState('');
-  const [dificuldade, setDificuldade] = useState<'facil' | 'media' | 'dificil'>('media');
-  const [alternativas, setAlternativas] = useState<IAlternativa[]>([
-    { descricao: '', correta: false },
-    { descricao: '', correta: false },
-    { descricao: '', correta: false },
-    { descricao: '', correta: false },
-  ]);
+  const [enunciado, setEnunciado] = useState(questaoAtual?.enunciado || '');
+  const [disciplina, setDisciplina] = useState(questaoAtual?.disciplina || '');
+  const [professor, setProfessor] = useState(questaoAtual?.professor || '');
+  const [dificuldade, setDificuldade] = useState<'facil' | 'media' | 'dificil'>(questaoAtual?.dificuldade || 'media');
+  const [alternativas, setAlternativas] = useState<IAlternativa[]>(
+    questaoAtual?.alternativas?.length
+      ? questaoAtual.alternativas
+      : [
+          { descricao: '', correta: false },
+          { descricao: '', correta: false },
+          { descricao: '', correta: false },
+          { descricao: '', correta: false },
+        ]
+  );
   const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    if (questaoAtual) {
+      setEnunciado(questaoAtual.enunciado);
+      setDisciplina(questaoAtual.disciplina);
+      setProfessor(questaoAtual.professor);
+      setDificuldade(questaoAtual.dificuldade || 'media');
+      setAlternativas(questaoAtual.alternativas);
+    }
+  }, [questaoAtual]);
 
   const handleAlternativaChange = (index: number, descricao: string) => {
     const novasAlternativas = [...alternativas];
@@ -65,15 +81,18 @@ export const QuestaoForm: React.FC<QuestaoFormProps> = ({
     }
 
     try {
-      await onSubmit({
-        enunciado,
-        disciplina,
-        professor,
-        dificuldade,
-        alternativas,
-      });
+      await onSubmit(
+        {
+          enunciado,
+          disciplina,
+          professor,
+          dificuldade,
+          alternativas,
+        },
+        questaoAtual?._id
+      );
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao criar questão');
+      setErro(err instanceof Error ? err.message : 'Erro ao salvar questão');
     }
   };
 
@@ -186,7 +205,7 @@ export const QuestaoForm: React.FC<QuestaoFormProps> = ({
           disabled={carregando}
           className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:opacity-50"
         >
-          {carregando ? 'Salvando...' : 'Salvar Questão'}
+          {carregando ? 'Salvando...' : questaoAtual ? 'Atualizar Questão' : 'Salvar Questão'}
         </button>
       </div>
     </form>
