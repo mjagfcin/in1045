@@ -1,20 +1,14 @@
-# Sistema de Gerenciamento de Provas - Script de Inicialização
-# Este script facilita a inicial do sistema localmente
+# Sistema de Gerenciamento de Provas - Script de Inicializacao
+# Este script facilita a initial do sistema localmente
 
-Write-Host "`n╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║      Sistema de Gerenciamento de Provas - Inicialização    ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════════════════╝`n" -ForegroundColor Cyan
+Write-Host "`n========================================================" -ForegroundColor Cyan
+Write-Host "   Sistema de Gerenciamento de Provas - Inicializacao    " -ForegroundColor Cyan
+Write-Host "========================================================`n" -ForegroundColor Cyan
 
 # Configurar PATH para Node.js
 $env:Path = "C:\Program Files\nodejs;" + $env:Path
 
-# Cores
-$Green = "Green"
-$Red = "Red"
-$Yellow = "Yellow"
-$Blue = "Cyan"
-
-# Função para log
+# Funcao para log
 function Log-Message {
     param(
         [string]$Prefix,
@@ -26,7 +20,7 @@ function Log-Message {
 }
 
 # 1. Verificar MongoDB
-Log-Message "📋" "Verificando MongoDB..." $Blue
+Log-Message "[*]" "Verificando MongoDB..." "Cyan"
 try {
     $mongoCheck = node -e "
     import { MongoClient } from 'mongodb';
@@ -42,67 +36,68 @@ try {
     " 2>$null
 
     if ($mongoCheck -match "ok") {
-        Log-Message "✓" "MongoDB está acessível" $Green
+        Log-Message "[+]" "MongoDB esta acessivel" "Green"
     } else {
-        Log-Message "✗" "MongoDB não está acessível" $Red
-        Log-Message "ℹ" "Certifique-se de que MongoDB está rodando localmente em docker" $Yellow
+        Log-Message "[-]" "MongoDB nao esta acessivel" "Red"
+        Log-Message "[i]" "Certifique-se de que MongoDB esta rodando localmente em docker" "Yellow"
         exit 1
     }
 } catch {
-    Log-Message "✗" "Erro ao verificar MongoDB: $_" $Red
+    Log-Message "[-]" "Erro ao verificar MongoDB: $_" "Red"
     exit 1
 }
 
 Write-Host ""
 
 # 2. Inicializar banco de dados
-Log-Message "📋" "Inicializando banco de dados..." $Blue
+Log-Message "[*]" "Inicializando banco de dados..." "Cyan"
 $scriptPath = Join-Path (Get-Location) "initDatabase.js"
 if (Test-Path $scriptPath) {
     $dbOutput = & node $scriptPath 2>&1
     if ($? -eq $true) {
-        Log-Message "✓" "Banco de dados inicializado com sucesso" $Green
+        Log-Message "[+]" "Banco de dados inicializado com sucesso" "Green"
     } else {
-        Log-Message "✗" "Erro ao inicializar banco de dados" $Red
+        Log-Message "[-]" "Erro ao inicializar banco de dados" "Red"
         exit 1
     }
 } else {
-    Log-Message "✗" "Script initDatabase.js não encontrado" $Red
+    Log-Message "[-]" "Script initDatabase.js nao encontrado" "Red"
     exit 1
 }
 
 Write-Host ""
-Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║           SISTEMA PRONTO PARA INICIALIZAR                 ║" -ForegroundColor Green
-Write-Host "╠════════════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  OPÇÃO 1: Rodar backend e frontend em janelas separadas   ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  Abra dois terminais PowerShell/CMD e execute:            ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  Terminal 1 - Backend:                                     ║" -ForegroundColor Green
-Write-Host "║    cd .\backend && npm run dev                             ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  Terminal 2 - Frontend:                                    ║" -ForegroundColor Green
-Write-Host "║    cd .\frontend && npm run dev                            ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  Depois acesse: http://localhost:3000                     ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "╠════════════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  OPÇÃO 2: Rodar testes de aceitação                       ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║    npm run test:acceptance                                ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  OPÇÃO 3: Rodar testes unitários                          ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║    npm test                                                ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "║  URLs de acesso:                                           ║" -ForegroundColor Green
-Write-Host "║    🌐 Frontend:  http://localhost:3000                    ║" -ForegroundColor Green
-Write-Host "║    🔌 Backend:   http://localhost:3001                    ║" -ForegroundColor Green
-Write-Host "║    💾 MongoDB:   mongodb://localhost:27017                ║" -ForegroundColor Green
-Write-Host "║                                                            ║" -ForegroundColor Green
-Write-Host "╚════════════════════════════════════════════════════════════╝`n" -ForegroundColor Green
+Write-Host "========================================================" -ForegroundColor Green
+Write-Host "       SISTEMA PRONTO PARA INICIALIZAR                  " -ForegroundColor Green
+Write-Host "========================================================`n" -ForegroundColor Green
+Write-Host "OPCAO 1: Rodar backend e frontend em janelas separadas  " -ForegroundColor Green
+Write-Host ""
+Write-Host "Abra dois terminais PowerShell/CMD e execute:           " -ForegroundColor Green
+Write-Host ""
+Write-Host "Terminal 1 - Backend:                                    " -ForegroundColor Green
+Write-Host "  cd .\backend && npm run dev                            " -ForegroundColor Green
+Write-Host ""
+Write-Host "Terminal 2 - Frontend:                                   " -ForegroundColor Green
+Write-Host "  cd .\frontend && npm run dev                           " -ForegroundColor Green
+Write-Host ""
+Write-Host "Depois acesse: http://localhost:3000                     " -ForegroundColor Green
+Write-Host ""
+Write-Host "========================================================" -ForegroundColor Green
+Write-Host "OPCAO 2: Rodar testes de aceitacao                       " -ForegroundColor Green
+Write-Host ""
+Write-Host "  npm run test:acceptance                                " -ForegroundColor Green
+Write-Host ""
+Write-Host "OPCAO 3: Rodar testes unitarios                          " -ForegroundColor Green
+Write-Host ""
+Write-Host "  npm test                                               " -ForegroundColor Green
+Write-Host ""
+Write-Host "========================================================" -ForegroundColor Green
+Write-Host "URLs de acesso:                                          " -ForegroundColor Green
+Write-Host ""
+Write-Host "  Frontend:  http://localhost:3000                       " -ForegroundColor Green
+Write-Host "  Backend:   http://localhost:3001                       " -ForegroundColor Green
+Write-Host "  MongoDB:   mongodb://localhost:27017                   " -ForegroundColor Green
+Write-Host ""
+Write-Host "========================================================`n" -ForegroundColor Green
 
-Log-Message "✓" "Sistema inicializado com sucesso!" $Green
+Log-Message "[+]" "Sistema inicializado com sucesso!" "Green"
 Write-Host ""
