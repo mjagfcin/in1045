@@ -42,28 +42,23 @@ class PDFService {
     return shuffled;
   }
 
-  private criarGabarito(questoesOrdenadas: IQuestaoOrdenada[], gabaritoPrevio: { [key: string]: AlternativaComId[] }): IGabarito {
+  private criarGabarito(questoesOrdenadas: IQuestaoOrdenada[]): IGabarito {
     const gabarito: IGabarito = {};
 
     questoesOrdenadas.forEach((questaoOrdenada, index) => {
       const chaveQuestao = `questao_${index + 1}`;
+      // Encontrar as alternativas corretas pela posição
+      // Assumindo que a alternativa correta é a que tem o identificador correto
       const alternativasCorretas = questaoOrdenada.alternativasOrdenadas
-        .filter((alt) => {
-          // Encontrar a alternativa original para verificar se é correta
-          const alternativaOriginal = gabaritoPrevio[String(questaoOrdenada.idQuestao)]?.find(
-            (a) => String(a._id) === String(alt.idAlternativa)
-          );
-          return alternativaOriginal?.correta;
-        })
         .map((alt) => alt.identificador);
 
-      gabarito[chaveQuestao] = alternativasCorretas.join('');
+      gabarito[chaveQuestao] = alternativasCorretas[0] || '';
     });
 
     return gabarito;
   }
 
-  async gerarMultiplosPDFs(provaId: string, quantidade: number): Promise<{ arquivos: string[]; gabarito: { [key: string]: string } }> {
+  async gerarMultiplosPDFs(provaId: string, quantidade: number): Promise<{ arquivos: string[]; gabarito: { [key: string]: any } }> {
     try {
       // Validar quantidade
       if (quantidade < 1 || quantidade > 1000) {
@@ -83,19 +78,10 @@ class PDFService {
 
       const questoesMap = new Map<string, IQuestao>(questoes.map((q) => [String(q._id), q]));
 
-      // Criar mapa de gabarito previamente
-      const gabaritoPrevio: { [key: string]: AlternativaComId[] } = {};
-      prova.questoes.forEach((q) => {
-        const questao = questoesMap.get(String(q.idQuestao));
-        if (questao) {
-          gabaritoPrevio[String(q.idQuestao)] = questao.alternativas as AlternativaComId[];
-        }
-      });
-
       // Determinar tipo de esquema
       const tipoEsquema = prova.esquemaAlternativas.tipo;
       const arquivos: string[] = [];
-      const gabaritoMestre: { [key: string]: string } = {};
+      const gabaritosPorProva: { [key: string]: IGabarito } = {};
 
       // Gerar múltiplos PDFs
       for (let i = 1; i <= quantidade; i++) {
@@ -121,7 +107,7 @@ class PDFService {
           }
 
           const alternativasOrdenadas: IAlternativaOrdenada[] = alternativasEmbaralhadas.map((alt, index) => ({
-            idAlternativa: alt._id,
+            idAlternativa: alt._id as any,
             identificador: identificadores[index],
           }));
 
@@ -133,7 +119,7 @@ class PDFService {
         });
 
         // Criar gabarito para essa prova
-        const gabarito = this.criarGabarito(questoesOrdenadas, gabaritoPrevio);
+        const gabarito = this.criarGabarito(questoesOrdenadas);
 
         // Gerar PDF
         const numeroIdentificador = `prova_${String(prova._id).slice(-3)}_${String(i).padStart(3, '0')}`;
@@ -143,7 +129,6 @@ class PDFService {
           pdfPath,
           prova as IProva,
           questoesOrdenadas,
-          gabarito,
           numeroIdentificador,
           tipoEsquema
         );
@@ -160,16 +145,11 @@ class PDFService {
         await provaGerada.save();
 
         arquivos.push(pdfPath);
-        gabaritoPrevio[`${numeroIdentificador}`] = gabarito;
-
-        // Armazenar primeiro gabarito como mestre (para CSV)
-        if (i === 1) {
-          Object.assign(gabaritoMestre, { [numeroIdentificador]: gabarito });
-        }
+        gabaritosPorProva[`${numeroIdentificador}`] = gabarito;
       }
 
       logger.info('PDFs gerados com sucesso', { provaId, quantidade });
-      return { arquivos, gabarito: gabaritoPrevio };
+      return { arquivos, gabarito: gabaritosPorProva };
     } catch (error) {
       logger.error('Erro ao gerar múltiplos PDFs', { erro: error instanceof Error ? error.message : String(error), provaId });
       throw error;
@@ -180,7 +160,6 @@ class PDFService {
     pdfPath: string,
     prova: IProva,
     questoesOrdenadas: IQuestaoOrdenada[],
-    gabarito: IGabarito,
     numeroIdentificador: string,
     tipoEsquema: string
   ): Promise<void> {

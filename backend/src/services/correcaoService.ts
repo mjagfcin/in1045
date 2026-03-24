@@ -1,5 +1,4 @@
 import { ResultadoProva, IResultadoProva, IAnaliseQuestao } from '../models/ResultadoProva';
-import { ProvaGerada } from '../models/ProvaGerada';
 import logger from '../config/logger';
 
 interface DadosCorrecao {
@@ -66,7 +65,7 @@ class CorrecaoService {
   private analisarRespostas(
     respostas: { [key: string]: string },
     gabarito: { [key: string]: string },
-    modoCorrecao: 'rigoroso' | 'flexivel'
+    _modoCorrecao: 'rigoroso' | 'flexivel'
   ): { [key: string]: IAnaliseQuestao } {
     const analise: { [key: string]: IAnaliseQuestao } = {};
 

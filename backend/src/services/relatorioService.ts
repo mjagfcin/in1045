@@ -1,6 +1,5 @@
 import { Relatorio, IRelatorio } from '../models/Relatorio';
 import { Prova } from '../models/Prova';
-import { ResultadoProva } from '../models/ResultadoProva';
 import logger from '../config/logger';
 import correcaoService from './correcaoService';
 import csvService from './csvService';
