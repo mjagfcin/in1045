@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Prova, IProva } from '../models/Prova';
 import { Questao, IQuestao } from '../models/Questao';
 import { ProvaGerada, IGabarito, IQuestaoOrdenada, IAlternativaOrdenada } from '../models/ProvaGerada';
+import csvService from './csvService';
 import logger from '../config/logger';
 import env from '../config/env';
 
@@ -42,23 +43,34 @@ class PDFService {
     return shuffled;
   }
 
-  private criarGabarito(questoesOrdenadas: IQuestaoOrdenada[]): IGabarito {
+  private criarGabarito(questoesOrdenadas: IQuestaoOrdenada[], questoesMap: Map<string, IQuestao>): IGabarito {
     const gabarito: IGabarito = {};
 
     questoesOrdenadas.forEach((questaoOrdenada, index) => {
       const chaveQuestao = `questao_${index + 1}`;
-      // Encontrar as alternativas corretas pela posição
-      // Assumindo que a alternativa correta é a que tem o identificador correto
-      const alternativasCorretas = questaoOrdenada.alternativasOrdenadas
-        .map((alt) => alt.identificador);
+      const questao = questoesMap.get(String(questaoOrdenada.idQuestao));
+      if (!questao) {
+        gabarito[chaveQuestao] = '';
+        return;
+      }
 
-      gabarito[chaveQuestao] = alternativasCorretas[0] || '';
+      const alternativasCorretas = questaoOrdenada.alternativasOrdenadas
+        .filter((altOrdenada) => {
+          const alternativaOriginal = questao.alternativas.find(
+            (alt) => String((alt as any)._id) === String(altOrdenada.idAlternativa)
+          );
+          return alternativaOriginal ? (alternativaOriginal as any).correta : false;
+        })
+        .map((altOrdenada) => altOrdenada.identificador);
+
+      gabarito[chaveQuestao] = alternativasCorretas.join(',') || '';
     });
 
     return gabarito;
   }
 
-  async gerarMultiplosPDFs(provaId: string, quantidade: number): Promise<{ arquivos: string[]; gabarito: { [key: string]: any } }> {
+
+  async gerarMultiplosPDFs(provaId: string, quantidade: number): Promise<{ arquivos: string[]; gabarito: { [key: string]: IGabarito }; caminhoGabarito: string }> {
     try {
       // Validar quantidade
       if (quantidade < 1 || quantidade > 1000) {
@@ -71,12 +83,20 @@ class PDFService {
         throw new Error('Prova não encontrada');
       }
 
+      logger.info('Prova questoes ids', { ids: prova.questoes.map(q => q.idQuestao) });
+
+      console.log('Ids da prova', prova.questoes.map(q => ({ id: q.idQuestao, ordem: q.ordem })));
+
       // Buscar questões em detalhe
+      const idsValidos = prova.questoes.map((q) => q.idQuestao).filter(id => id);
       const questoes = await Questao.find({
-        _id: { $in: prova.questoes.map((q) => q.idQuestao) },
+        _id: { $in: idsValidos.length > 0 ? idsValidos : (await Questao.find({}).select('_id')).map(q => q._id) },
       });
 
       const questoesMap = new Map<string, IQuestao>(questoes.map((q) => [String(q._id), q]));
+
+      const ultimoGerado = await ProvaGerada.findOne({ idProva: prova._id }).sort({ numeroSequencial: -1 });
+      const sequencialInicial = ultimoGerado ? ultimoGerado.numeroSequencial : 0;
 
       // Determinar tipo de esquema
       const tipoEsquema = prova.esquemaAlternativas.tipo;
@@ -85,15 +105,20 @@ class PDFService {
 
       // Gerar múltiplos PDFs
       for (let i = 1; i <= quantidade; i++) {
-        // Embaralhar ordem de questões
-        const questoesEmbaralhadas = this.shuffleArray(prova.questoes);
+        const numeroSequencial = sequencialInicial + i;
+
+        // DEBUG: usar questoes encontradas em vez da prova
+        const questoesEmbaralhadas = this.shuffleArray(questoes.map((q, index) => ({ idQuestao: q._id, ordem: index + 1 })));
 
         // Para cada questão, embaralhar alternativas
         const questoesOrdenadas: IQuestaoOrdenada[] = [];
 
         questoesEmbaralhadas.forEach((questaoProva, indexQuestao) => {
           const questao = questoesMap.get(String(questaoProva.idQuestao));
-          if (!questao) return;
+          if (!questao) {
+            console.log('Questao não encontrada no map', questaoProva.idQuestao);
+            return;
+          }
 
           // Embaralhar alternativas
           const alternativasEmbaralhadas = this.shuffleArray([...(questao.alternativas as AlternativaComId[])]);
@@ -118,11 +143,13 @@ class PDFService {
           });
         });
 
+        console.log('Questoes ordenadas count', questoesOrdenadas.length);
+
         // Criar gabarito para essa prova
-        const gabarito = this.criarGabarito(questoesOrdenadas);
+        const gabarito = this.criarGabarito(questoesOrdenadas, questoesMap);
 
         // Gerar PDF
-        const numeroIdentificador = `prova_${String(prova._id).slice(-3)}_${String(i).padStart(3, '0')}`;
+        const numeroIdentificador = `prova_${String(prova._id).slice(-3)}_${String(numeroSequencial).padStart(3, '0')}_${Date.now()}`;
         const pdfPath = path.join(this.uploadDir, `${numeroIdentificador}.pdf`);
 
         await this.gerarPDFIndividual(
@@ -130,13 +157,14 @@ class PDFService {
           prova as IProva,
           questoesOrdenadas,
           numeroIdentificador,
-          tipoEsquema
+          tipoEsquema,
+          questoesMap
         );
 
         // Salvar metadados em ProvaGerada
         const provaGerada = new ProvaGerada({
           idProva: prova._id,
-          numeroSequencial: i,
+          numeroSequencial,
           numeroIdentificador,
           questoesOrdenadas,
           gabarito,
@@ -148,8 +176,11 @@ class PDFService {
         gabaritosPorProva[`${numeroIdentificador}`] = gabarito;
       }
 
-      logger.info('PDFs gerados com sucesso', { provaId, quantidade });
-      return { arquivos, gabarito: gabaritosPorProva };
+      // Criar arquivo de gabarito geral
+      const caminhoGabarito = await csvService.gerarCSVGabarito(gabaritosPorProva);
+
+      logger.info('PDFs gerados com sucesso', { provaId, quantidade, caminhoGabarito });
+      return { arquivos, gabarito: gabaritosPorProva, caminhoGabarito };
     } catch (error) {
       logger.error('Erro ao gerar múltiplos PDFs', { erro: error instanceof Error ? error.message : String(error), provaId });
       throw error;
@@ -161,7 +192,8 @@ class PDFService {
     prova: IProva,
     questoesOrdenadas: IQuestaoOrdenada[],
     numeroIdentificador: string,
-    tipoEsquema: string
+    tipoEsquema: string,
+    questoesMap: Map<string, IQuestao>
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -190,15 +222,22 @@ class PDFService {
         // Questões
         let numQuestao = 1;
         questoesOrdenadas.forEach((questaoOrdenada) => {
-          doc.fontSize(11).font('Helvetica-Bold').text(`Questão ${numQuestao}:`, { align: 'left' });
+          const questao = questoesMap.get(String(questaoOrdenada.idQuestao));
+          if (!questao) {
+            logger.warn('Questão não encontrada no map', { idQuestao: questaoOrdenada.idQuestao });
+            return;
+          }
 
-          // Buscar questão original (seria necessário popular aqui)
-          // Por simplicidade, usaremos dados já carregados
-          doc.fontSize(10).font('Helvetica').text('Enunciado da questão', { align: 'left' }).moveDown(0.5);
+          doc.fontSize(11).font('Helvetica-Bold').text(`Questão ${numQuestao}:`, { align: 'left' });
+          doc.fontSize(10).font('Helvetica').text(questao.enunciado || 'Enunciado não disponível', { align: 'left' }).moveDown(0.5);
 
           // Alternativas
-          questaoOrdenada.alternativasOrdenadas.forEach((alt) => {
-            doc.fontSize(10).text(`${alt.identificador}) Descrição alternativa`, { align: 'left' });
+          questaoOrdenada.alternativasOrdenadas.forEach((altOrdenada) => {
+            const altOriginal = questao.alternativas.find(
+              (a) => String((a as any)._id) === String(altOrdenada.idAlternativa)
+            );
+            const descricaoAlt = altOriginal ? altOriginal.descricao : 'Alternativa não encontrada';
+            doc.fontSize(10).text(`${altOrdenada.identificador}) ${descricaoAlt}`, { align: 'left' });
           });
 
           // Espaço para resposta

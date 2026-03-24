@@ -53,7 +53,7 @@ class PDFController {
         return;
       }
 
-      const { arquivos } = await pdfService.gerarMultiplosPDFs(provaId, quantidade);
+      const { arquivos, caminhoGabarito } = await pdfService.gerarMultiplosPDFs(provaId, quantidade);
 
       if (!arquivos || arquivos.length === 0) {
         res.status(404).json({
@@ -80,6 +80,10 @@ class PDFController {
           archive.file(arquivo, { name: arquivoComNome });
         }
       });
+
+      if (caminhoGabarito && fs.existsSync(caminhoGabarito)) {
+        archive.file(caminhoGabarito, { name: path.basename(caminhoGabarito) });
+      }
 
       archive.finalize();
     } catch (error) {
