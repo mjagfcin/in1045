@@ -4,11 +4,17 @@ import logger from '../config/logger';
 interface CreateQuestaoDTO {
   enunciado: string;
   alternativas: Array<{ descricao: string; correta: boolean }>;
+  disciplina: string;
+  professor: string;
+  dificuldade?: 'facil' | 'media' | 'dificil';
 }
 
 interface UpdateQuestaoDTO {
   enunciado?: string;
   alternativas?: Array<{ descricao: string; correta: boolean }>;
+  disciplina?: string;
+  professor?: string;
+  dificuldade?: 'facil' | 'media' | 'dificil';
 }
 
 class QuestaoService {

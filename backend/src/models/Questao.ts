@@ -8,6 +8,9 @@ interface IAlternativa {
 interface IQuestao extends Document {
   enunciado: string;
   alternativas: IAlternativa[];
+  disciplina: string;
+  professor: string;
+  dificuldade?: 'facil' | 'media' | 'dificil';
   dataCriacao: Date;
   dataAtualizacao: Date;
   ativo: boolean;
@@ -43,6 +46,21 @@ const questaoSchema = new Schema<IQuestao>(
         message: 'Questão deve ter entre 2 e 10 alternativas',
       },
       required: [true, 'Alternativas são obrigatórias'],
+    },
+    disciplina: {
+      type: String,
+      required: [true, 'Disciplina é obrigatória'],
+      trim: true,
+    },
+    professor: {
+      type: String,
+      required: [true, 'Professor é obrigatório'],
+      trim: true,
+    },
+    dificuldade: {
+      type: String,
+      enum: ['facil', 'media', 'dificil'],
+      default: 'media',
     },
     dataCriacao: {
       type: Date,

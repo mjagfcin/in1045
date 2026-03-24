@@ -5,11 +5,14 @@ import logger from '../config/logger';
 class QuestaoController {
   async create(req: Request, res: Response): Promise<void> {
     try {
-      const { enunciado, alternativas } = req.body;
+      const { enunciado, alternativas, disciplina, professor, dificuldade } = req.body;
 
       const questao = await questaoService.createQuestao({
         enunciado,
         alternativas,
+        disciplina,
+        professor,
+        dificuldade,
       });
 
       res.status(201).json({
