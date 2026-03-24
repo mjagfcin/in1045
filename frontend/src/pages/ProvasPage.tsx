@@ -164,8 +164,21 @@ export default function ProvasPage() {
                         }
                         try {
                           setCarregandoOperacao(true)
-                          const result = await pdfService.gerarPDFs(prova._id || '', quantidade)
-                          setMensagemSucesso(`${result.mensagem}`)
+
+                          // Gera os PDFs no servidor e baixa um ZIP com os arquivos
+                          const blob = await pdfService.gerarPDFsZip(prova._id || '', quantidade)
+
+                          const nomeArquivo = `provas_${prova._id}_${quantidade}.zip`
+                          const url = window.URL.createObjectURL(blob)
+                          const link = document.createElement('a')
+                          link.href = url
+                          link.download = nomeArquivo
+                          document.body.appendChild(link)
+                          link.click()
+                          link.remove()
+                          window.URL.revokeObjectURL(url)
+
+                          setMensagemSucesso(`ZIP com ${quantidade} PDF(s) gerado(s) e baixado(s) com sucesso!`)
                         } catch (err) {
                           setErro(err instanceof Error ? err.message : 'Erro ao gerar PDFs')
                         } finally {
@@ -175,7 +188,7 @@ export default function ProvasPage() {
                       disabled={carregandoOperacao}
                       className="text-purple-600 hover:underline disabled:opacity-50"
                     >
-                      Gerar PDFs
+                      Gerar PDF(s) e Baixar ZIP
                     </button>
                     <button 
                       onClick={() => handleDeletarProva(prova._id)}

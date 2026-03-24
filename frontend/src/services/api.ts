@@ -116,6 +116,22 @@ export const pdfService = {
       body: { provaId, quantidade },
     }),
 
+  gerarPDFsZip: async (provaId: string, quantidade: number): Promise<Blob> => {
+    const response = await fetch(
+      `${API_BASE_URL}/pdf/zip?provaId=${encodeURIComponent(provaId)}&quantidade=${quantidade}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    if (!response.ok) {
+      const erroData = await response.json().catch(() => ({}));
+      throw new Error(erroData.mensagem || `Erro na requisição: ${response.statusText}`);
+    }
+
+    return response.blob();
+  },
+
   gerarGabarito: (gabaritos: any) =>
     fazerRequisicao<IResponseAPI<{ arquivo: string }>>('/pdf/gabarito', {
       method: 'POST',
