@@ -138,3 +138,53 @@ export const pdfService = {
       body: { gabaritos },
     }),
 };
+
+/**
+ * Serviço de Correção de Provas
+ */
+export const correcaoService = {
+  corrigirProvas: async (provaId: string, gabaritoFile: File, respostasFile: File, modoCorrecao: 'rigoroso' | 'flexivel' = 'rigoroso') => {
+    const formData = new FormData();
+    formData.append('provaId', provaId);
+    formData.append('modoCorrecao', modoCorrecao);
+    formData.append('gabarito', gabaritoFile);
+    formData.append('respostas', respostasFile);
+
+    const response = await fetch(`${API_BASE_URL}/correcao/corrigir`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const erroData = await response.json().catch(() => ({}));
+      throw new Error(erroData.mensagem || `Erro na requisição: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  gerarRelatorioNotas: (provaId: string) =>
+    fazerRequisicao<IResponseAPI<any>>(`/correcao/relatorio/${provaId}`),
+
+  exportarRelatorioCSV: async (provaId: string) => {
+    const response = await fetch(`${API_BASE_URL}/correcao/relatorio/${provaId}/csv`);
+
+    if (!response.ok) {
+      const erroData = await response.json().catch(() => ({}));
+      throw new Error(erroData.mensagem || `Erro na requisição: ${response.statusText}`);
+    }
+
+    return response.blob();
+  },
+
+  exportarRelatorioPDF: async (provaId: string) => {
+    const response = await fetch(`${API_BASE_URL}/correcao/relatorio/${provaId}/pdf`);
+
+    if (!response.ok) {
+      const erroData = await response.json().catch(() => ({}));
+      throw new Error(erroData.mensagem || `Erro na requisição: ${response.statusText}`);
+    }
+
+    return response.blob();
+  },
+};

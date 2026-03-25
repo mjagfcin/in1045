@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import QuestoesPage from './pages/QuestoesPage'
 import ProvasPage from './pages/ProvasPage'
+import CorrecaoPage from './pages/CorrecaoPage'
 import Home from './pages/Home'
 
 function App() {
@@ -22,6 +23,9 @@ function App() {
                 <Link to="/provas" className="hover:bg-blue-700 px-3 py-2 rounded">
                   Provas
                 </Link>
+                <Link to="/correcao" className="hover:bg-blue-700 px-3 py-2 rounded">
+                  Correção
+                </Link>
               </div>
             </div>
           </div>
@@ -33,6 +37,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/questoes" element={<QuestoesPage />} />
             <Route path="/provas" element={<ProvasPage />} />
+            <Route path="/correcao" element={<CorrecaoPage />} />
           </Routes>
         </main>
       </div>
