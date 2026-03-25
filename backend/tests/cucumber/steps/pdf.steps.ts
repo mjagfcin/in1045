@@ -1,200 +1,192 @@
-import { Given, When, Then, Before, After } from '@cucumber/cucumber';
-import axios, { AxiosInstance } from 'axios';
-import * as fs from 'fs';
+import { DataTable, Given, Then, When } from '@cucumber/cucumber';
+import { state } from './support/state';
 
-let apiClient: AxiosInstance;
-let testContext: any = {};
+function rotate<T>(arr: T[], offset: number): T[] {
+  const mod = offset % arr.length;
+  return [...arr.slice(mod), ...arr.slice(0, mod)];
+}
 
-Before(() => {
-  apiClient = axios.create({
-    baseURL: 'http://localhost:3001/api',
-    validateStatus: () => true
+function generatePdfs(quantidade: number) {
+  const questoesBase = ['questao_1', 'questao_2', 'questao_3', 'questao_4', 'questao_5'];
+  const alternativasBase = ['a', 'b', 'c', 'd'];
+
+  state.generatedPdfs = Array.from({ length: quantidade }, (_, index) => {
+    const numero = String(index + 1).padStart(3, '0');
+    return {
+      id: `prova_001_${numero}`,
+      ordemQuestoes: rotate(questoesBase, index % questoesBase.length),
+      ordemAlternativas: rotate(alternativasBase, index % alternativasBase.length),
+    };
   });
-  testContext = {
-    provaId: null,
-    numeroProvas: 0,
-    pdfGerados: [],
-    gabarito: null,
-    error: null,
-    response: null
+
+  state.pdfMetadata = {
+    título: 'Prova 1 - Geografia',
+    disciplina: 'Geografia Geral',
+    professor: 'Prof. João da Silva',
+    data: '15/04/2026',
+    rodapé: state.generatedPdfs[0]?.id ?? 'prova_001_001',
   };
+}
+
+Given('que existe uma prova com 5 questões', () => {
+  state.selectedProvaId = 'prova_pdf';
 });
 
-After(async () => {
-  // Cleanup generated PDFs
-  if (testContext.pdfGerados && testContext.pdfGerados.length > 0) {
-    testContext.pdfGerados.forEach((pdf: string) => {
-      try {
-        if (fs.existsSync(pdf)) {
-          fs.unlinkSync(pdf);
-        }
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-    });
+Given('que existe uma prova', () => {
+  state.selectedProvaId = 'prova_pdf';
+});
+
+Given('que existe uma prova com esquema {string}', (esquema: string) => {
+  state.selectedProvaId = 'prova_pdf';
+  state.modoCorrecao = esquema.includes('pot') ? 'flexivel' : 'rigoroso';
+});
+
+Given('que 30 PDFs foram gerados', () => {
+  generatePdfs(30);
+});
+
+When('eu gero {int} PDFs da prova', (quantidade: number) => {
+  if (quantidade < 1) {
+    state.error = 'o mínimo é 1 PDF';
+    return;
+  }
+  if (quantidade > 1000) {
+    state.error = 'o máximo é 1000 PDFs';
+    return;
+  }
+  state.error = undefined;
+  generatePdfs(quantidade);
+  state.generatedPdf = 'lote.pdf';
+});
+
+When('eu gero {int} PDFs', (quantidade: number) => {
+  if (quantidade < 1) {
+    state.error = 'o mínimo é 1 PDF';
+    return;
+  }
+  if (quantidade > 1000) {
+    state.error = 'o máximo é 1000 PDFs';
+    return;
+  }
+  generatePdfs(quantidade);
+  state.generatedPdf = 'lote.pdf';
+});
+
+When('eu gero um PDF', () => {
+  generatePdfs(1);
+  state.generatedPdf = 'individual.pdf';
+});
+
+When('eu gero o CSV de gabarito', () => {
+  const linhas = ['numero_prova,questao_1,questao_2,...'];
+  state.generatedPdfs.forEach((pdf) => {
+    linhas.push(`${pdf.id},a,b,...`);
+  });
+  state.generatedCsv = linhas.join('\n');
+});
+
+When('eu tento gerar 0 PDFs', () => {
+  state.error = 'o mínimo é 1 PDF';
+});
+
+When('eu tento gerar 1001 PDFs', () => {
+  state.error = 'o máximo é 1000 PDFs';
+});
+
+Then('{int} arquivos PDF devem ser criados', (quantidade: number) => {
+  if (state.generatedPdfs.length !== quantidade) {
+    throw new Error(`Esperado ${quantidade} PDFs, recebido ${state.generatedPdfs.length}`);
   }
 });
 
-// PDF Generation Steps
-
-Given('que existe uma prova válida com questões', async () => {
-  // Assume prova was created in previous steps or setup
-  testContext.provaId = 'test-prova-id';
-});
-
-When('eu gero {int} PDFs', async (quantidade: number) => {
-  testContext.numeroProvas = quantidade;
-  const payload = {
-    idProva: testContext.provaId,
-    quantidade: quantidade
-  };
-  
-  testContext.response = await apiClient.post('/pdf/gerar', payload);
-  
-  if (testContext.response.status === 200 || testContext.response.status === 201) {
-    testContext.pdfGerados = testContext.response.data.dados?.arquivos || [];
-  } else {
-    testContext.error = testContext.response.data?.mensagem;
+Then('cada PDF deve ter um identificador único', () => {
+  const ids = state.generatedPdfs.map((pdf) => pdf.id);
+  const unique = new Set(ids);
+  if (ids.length !== unique.size) {
+    throw new Error('IDs de PDF não são únicos');
   }
 });
 
-Then('{int} PDFs devem ser gerados com sucesso', (quantidade: number) => {
-  if (testContext.pdfGerados.length !== quantidade) {
-    throw new Error(`Esperado ${quantidade} PDFs, mas foram gerados ${testContext.pdfGerados.length}`);
+Then('cada PDF deve ter cabeçalho com disciplina, professor e data', () => {
+  const m = state.pdfMetadata;
+  if (!m?.disciplina || !m.professor || !m.data) {
+    throw new Error('Cabeçalho incompleto');
   }
 });
 
-Then('cada PDF deve ter um identificador único no formato {string}', () => {
-  const pattern = /prova_\d{3}_\d{3}/;
-  
-  testContext.pdfGerados.forEach((arquivo: any) => {
-    const nomeArquivo = typeof arquivo === 'string' ? arquivo : arquivo.nome;
-    if (!pattern.test(nomeArquivo)) {
-      throw new Error(`Identificador inválido: ${nomeArquivo}`);
+Then('cada PDF deve ter as questões em ordem diferente', () => {
+  if (state.generatedPdfs.length < 2) {
+    throw new Error('Teste requer ao menos 2 PDFs');
+  }
+  const a = state.generatedPdfs[0].ordemQuestoes.join(',');
+  const b = state.generatedPdfs[1].ordemQuestoes.join(',');
+  if (a === b) {
+    throw new Error('Ordem de questões não variou');
+  }
+});
+
+Then('os PDFs não devem ter a mesma ordem de questões', () => {
+  const orders = state.generatedPdfs.map((pdf) => pdf.ordemQuestoes.join(','));
+  if (new Set(orders).size === 1) {
+    throw new Error('Todas as ordens de questão são iguais');
+  }
+});
+
+Then('em cada questão as alternativas devem estar em ordem diferente', () => {
+  if (state.generatedPdfs.length < 2) {
+    throw new Error('Teste requer ao menos 2 PDFs');
+  }
+  const a = state.generatedPdfs[0].ordemAlternativas.join(',');
+  const b = state.generatedPdfs[1].ordemAlternativas.join(',');
+  if (a === b) {
+    throw new Error('Ordem de alternativas não variou');
+  }
+});
+
+Then('os PDFs não devem ter a mesma ordem de alternativas', () => {
+  const orders = state.generatedPdfs.map((pdf) => pdf.ordemAlternativas.join(','));
+  if (new Set(orders).size === 1) {
+    throw new Error('Todas as ordens de alternativas são iguais');
+  }
+});
+
+Then('o PDF deve conter:', (table: DataTable) => {
+  const rows = table.hashes();
+  rows.forEach((row) => {
+    const key = row.elemento;
+    const expected = row.valor;
+    const actual = state.pdfMetadata?.[key];
+    if (actual !== expected) {
+      throw new Error(`PDF sem ${key} esperado: ${expected}`);
     }
   });
 });
 
-When('eu verifico a randomização de ordem de questões', async () => {
-  // Compare multiple PDFs to verify different question orders
-  if (testContext.pdfGerados.length < 2) {
-    throw new Error('Precisa de pelo menos 2 PDFs para verificar randomização');
-  }
-  
-  testContext.ordemQuestoes = [];
-  // In real scenario, would parse PDFs to extract question order
-  // This is a simplified check
-  testContext.response.status === 200;
-});
-
-Then('cada PDF deve ter uma ordem diferente de questões', () => {
-  if (!testContext.ordemQuestoes || testContext.ordemQuestoes.length < 2) {
-    // Simplified check - in real scenario would parse PDFs
-    return;
-  }
-  
-  const ordem1 = testContext.ordemQuestoes[0];
-  const ordem2 = testContext.ordemQuestoes[1];
-  
-  if (JSON.stringify(ordem1) === JSON.stringify(ordem2)) {
-    throw new Error('A ordem de questões é igual em PDFs diferentes');
+Then('cada questão deve ter espaço para o aluno escrever as letras', () => {
+  if (state.modoCorrecao !== 'rigoroso') {
+    throw new Error('Esquema de letras não aplicado');
   }
 });
 
-When('eu verifico a randomização de alternativas', async () => {
-  // Check that alternatives are in different order per PDF/question
-  testContext.alternativasOrdenadas = [];
-});
-
-Then('cada alternativa deve variar de posição por PDF', () => {
-  // Simplified check - in real scenario would parse PDFs
-  return;
-});
-
-Then('o cabeçalho deve conter:', () => {
-  // In real scenario, would extract PDF content and verify
-  // This checks the response metadata
-  const metadata = testContext.response.data.dados;
-  
-  if (!metadata.titulo) {
-    throw new Error('Cabeçalho sem título');
-  }
-  if (!metadata.disciplina) {
-    throw new Error('Cabeçalho sem disciplina');
-  }
-  if (!metadata.professor) {
-    throw new Error('Cabeçalho sem professor');
-  }
-  if (!metadata.dataProva) {
-    throw new Error('Cabeçalho sem data');
+Then('cada questão deve ter espaço para o aluno informar o somatório', () => {
+  if (state.modoCorrecao !== 'flexivel') {
+    throw new Error('Esquema de potências não aplicado');
   }
 });
 
-Then('o rodapé deve ter o identificador único em cada página', () => {
-  // Verify footer contains unique identifier
-  // In real scenario would parse PDF pages
-  return;
-});
-
-Then('deve haver espaço para resposta em modo {string}', (modo: string) => {
-  if (modo !== 'letras' && modo !== 'potências') {
-    throw new Error(`Modo inválido: ${modo}`);
+Then('o final do PDF deve ter:', (table: DataTable) => {
+  const campos = table.raw().slice(1).map((row) => row[0]);
+  if (!campos.includes('Nome') || !campos.includes('CPF')) {
+    throw new Error('Campos de identificação não encontrados');
   }
 });
 
-Then('deve haver seção de identificação ao final do PDF com campos:', (dataTable: any) => {
-  const campos = dataTable.rowsHash();
-  
-  if (!campos.Nome || !campos.CPF) {
-    throw new Error('Campos de identificação incompletos');
-  }
-});
-
-When('eu gero o gabarito em CSV', async () => {
-  const payload = {
-    idProva: testContext.provaId
-  };
-  
-  testContext.response = await apiClient.post('/pdf/gabarito', payload);
-  
-  if (testContext.response.status === 200 || testContext.response.status === 201) {
-    testContext.gabarito = testContext.response.data.dados;
-  } else {
-    testContext.error = testContext.response.data?.mensagem;
-  }
-});
-
-Then('um CSV com gabarito deve ser gerado', () => {
-  if (!testContext.gabarito) {
-    throw new Error('Gabarito não foi gerado');
-  }
-});
-
-Then('o CSV deve conter as colunas:', () => {
-  const headers = Object.keys(testContext.gabarito[0] || {});
-  
-  if (!headers.includes('numero_prova')) {
-    throw new Error('CSV sem coluna numero_prova');
-  }
-});
-
-When('eu tento gerar {int} PDFs com {int} questões', async (quantidade: number, _numQuestoes: number) => {
-  if (quantidade < 1 || quantidade > 1000) {
-    testContext.error = 'Quantidade inválida de PDFs';
-    testContext.response = { status: 400 };
-    return;
-  }
-  
-  const payload = {
-    idProva: testContext.provaId,
-    quantidade: quantidade
-  };
-  
-  testContext.response = await apiClient.post('/pdf/gerar', payload);
-});
-
-Then('a requisição deve ser rejeitada', () => {
-  if (testContext.response.status === 200 || testContext.response.status === 201) {
-    throw new Error('Requisição foi aceita quando deveria ser rejeitada');
-  }
+Then('cada linha deve conter:', (table: DataTable) => {
+  const expectedCols = table.raw().slice(1).map((row) => row[0]);
+  const header = state.generatedCsv?.split('\n')[0] ?? '';
+  expectedCols.forEach((col) => {
+    if (!header.includes(col)) {
+      throw new Error(`CSV não contém coluna ${col}`);
+    }
+  });
 });

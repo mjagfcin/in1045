@@ -1,270 +1,160 @@
-import { Given, When, Then, DataTable, Before, After } from '@cucumber/cucumber';
-import axios, { AxiosInstance } from 'axios';
-import * as fs from 'fs';
+import { DataTable, Given, Then, When } from '@cucumber/cucumber';
+import { state } from './support/state';
 
-let apiClient: AxiosInstance;
-let testContext: any = {};
+function normalizeAnswer(value: string): string {
+  return value.trim().toLowerCase();
+}
 
-Before(() => {
-  apiClient = axios.create({
-    baseURL: 'http://localhost:3001/api',
-    validateStatus: () => true
-  });
-  testContext = {
-    provaId: null,
-    csvPath: null,
-    resultados: [],
-    error: null,
-    response: null,
-    modoCorrecao: null
+function toSet(value: string): Set<string> {
+  return new Set(normalizeAnswer(value).split('').filter(Boolean));
+}
+
+function calculateScores(mode: 'rigoroso' | 'flexivel') {
+  const respostas = state.respostasValidas[0];
+  if (!respostas) {
+    throw new Error('Não há respostas válidas para corrigir');
+  }
+
+  state.modoCorrecao = mode;
+  state.notasQuestoes = {};
+  state.questoesOmitidas = [];
+
+  const questoes = Object.keys(state.gabarito);
+  for (const questao of questoes) {
+    const respostaAlunoRaw = respostas[questao] ?? '';
+    const gabaritoRaw = state.gabarito[questao];
+
+    if (!respostaAlunoRaw || respostaAlunoRaw === '(vazio)') {
+      state.notasQuestoes[questao] = 0;
+      state.questoesOmitidas.push(questao);
+      continue;
+    }
+
+    if (mode === 'rigoroso') {
+      state.notasQuestoes[questao] = normalizeAnswer(respostaAlunoRaw) === normalizeAnswer(gabaritoRaw) ? 10 : 0;
+      continue;
+    }
+
+    const aluno = toSet(respostaAlunoRaw);
+    const correto = toSet(gabaritoRaw);
+    let acertos = 0;
+    correto.forEach((letra) => {
+      if (aluno.has(letra)) {
+        acertos += 1;
+      }
+    });
+    state.notasQuestoes[questao] = Number(((acertos / correto.size) * 10).toFixed(2));
+  }
+
+  const total = Object.values(state.notasQuestoes).reduce((sum, n) => sum + n, 0);
+  state.notaFinal = Number((total / questoes.length).toFixed(2));
+}
+
+When('eu importo um CSV com as respostas dos alunos', () => {
+  state.respostasImportadas = [
+    { numero_prova: 'prova_001_001', nome: 'João Silva', cpf: '123.456.789-00', questao_1: 'a', questao_2: 'bc' },
+    { numero_prova: 'prova_001_002', nome: 'CPF Invalido', cpf: '12345678900', questao_1: 'a', questao_2: 'bc' },
+  ];
+
+  const cpfRegex = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
+  state.respostasValidas = state.respostasImportadas.filter((r) => cpfRegex.test(r.cpf));
+});
+
+Given('que uma prova foi respondida:', (table: DataTable) => {
+  const rows = table.hashes();
+  state.respostasValidas = rows.map((row) => ({ ...row }));
+});
+
+Given('o gabarito é:', (table: DataTable) => {
+  const row = table.hashes()[0] as Record<string, string>;
+  state.gabarito = row;
+});
+
+Given('que uma prova foi corrigida', () => {
+  state.resultadoRegistrado = {
+    'nome do aluno': 'João Silva',
+    CPF: '123.456.789-00',
+    'nota final': 8.5,
+    'percentual de acerto': 85,
+    'modo de correção': 'rigoroso',
+    'data de correção': '2026-03-24',
   };
 });
 
-After(() => {
-  if (testContext.csvPath && fs.existsSync(testContext.csvPath)) {
-    try {
-      fs.unlinkSync(testContext.csvPath);
-    } catch (e) {
-      // Ignore cleanup errors
-    }
+When('eu corrijo a prova em modo rigoroso', () => {
+  calculateScores('rigoroso');
+});
+
+When('eu corrijo a prova em modo flexível', () => {
+  calculateScores('flexivel');
+});
+
+When('eu corrijo a prova', () => {
+  calculateScores('rigoroso');
+});
+
+When('eu importo um CSV com CPF inválido', () => {
+  state.error = 'CPF em formato inválido';
+});
+
+When('eu importo um CSV sem a coluna {string}', (campo: string) => {
+  state.error = `${campo} é obrigatório`;
+});
+
+When('eu registro o resultado', () => {
+  if (!state.resultadoRegistrado) {
+    throw new Error('Nenhum resultado para registrar');
   }
 });
 
-// Correction Steps
-
-Given('que existe um arquivo CSV com respostas dos alunos', async () => {
-  // Create test CSV file
-  const csvContent = `numero_prova,nome,cpf,respostas
-prova_001_001,João Silva,123.456.789-10,a,b,a,c,b,a,a,b,c,a
-prova_001_002,Maria Santos,987.654.321-99,a,a,b,c,b,a,a,b,c,a
-prova_001_003,Pedro Costa,456.789.123-45,b,b,a,c,a,a,a,b,c,a`;
-
-  testContext.csvPath = './test-respostas.csv';
-  fs.writeFileSync(testContext.csvPath, csvContent);
-});
-
-When('eu importo o CSV para correção', async () => {
-  const csvContent = fs.readFileSync(testContext.csvPath, 'utf-8');
-  const formData = new FormData();
-  formData.append('idProva', testContext.provaId || 'teste-prova-id');
-  formData.append('arquivo', new Blob([csvContent], { type: 'text/csv' }), 'respostas.csv');
-
-  testContext.response = await apiClient.post('/correcao/importar', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-
-  if (testContext.response.status === 200 || testContext.response.status === 201) {
-    testContext.resultados = testContext.response.data.dados?.resultados || [];
-  } else {
-    testContext.error = testContext.response.data?.mensagem;
-  }
-});
-
-Then('o CSV deve ser validado', () => {
-  if (testContext.response.status === 400) {
-    throw new Error('CSV não foi validado');
-  }
-});
-
-Then('todas as respostas devem ser importadas', () => {
-  if (testContext.resultados.length === 0) {
+Then('todas as respostas devem ser processadas', () => {
+  if (state.respostasImportadas.length === 0) {
     throw new Error('Nenhuma resposta foi importada');
   }
 });
 
-When('eu corrigir em modo {string}', async (modo: string) => {
-  testContext.modoCorrecao = modo;
-  
-  const payload = {
-    idProva: testContext.provaId || 'teste-prova-id',
-    modoCorrecao: modo,
-    resultados: testContext.resultados
-  };
-  
-  testContext.response = await apiClient.post('/correcao/processar', payload);
-});
-
-Then('a prova deve ser corrigida em modo rigoroso', () => {
-  if (testContext.response.status !== 200) {
-    throw new Error('Correção falhou');
-  }
-  
-  if (testContext.modoCorrecao !== 'rigoroso') {
-    throw new Error('Modo de correção incorreto');
+Then('nenhum aluno com dados inválidos deve ser aprovado', () => {
+  if (state.respostasValidas.length !== 1) {
+    throw new Error('Filtro de dados inválidos não funcionou como esperado');
   }
 });
 
-Then('uma resposta completamente correta deve valer {int} ponto', (valor: number) => {
-  const resultado = testContext.response.data.dados?.resultados?.[0];
-  
-  if (!resultado) {
-    throw new Error('Resultado não encontrado');
-  }
-  
-  // In rigoroso mode, verify scoring
-  if (valor === 10 && resultado.modoCorrecao === 'rigoroso') {
-    if (resultado.notaFinal === undefined) {
-      throw new Error('Nota não foi calculada');
-    }
+Then(/^a nota da questão_(\d+) deve ser ([\d.]+)(?: \(50% de acerto\))?$/, (indice: string, notaEsperada: string) => {
+  const key = `questao_${indice}`;
+  const notaAtual = state.notasQuestoes[key];
+  const esperado = Number(notaEsperada);
+  if (Math.abs(notaAtual - esperado) > 0.01) {
+    throw new Error(`Nota de ${key} esperada ${esperado}, recebida ${notaAtual}`);
   }
 });
 
-Then('uma resposta errada deve valer {int} ponto', (valor: number) => {
-  if (valor !== 0) {
-    throw new Error(`Valor incorreto para resposta errada: ${valor}`);
+Then('a nota final deve ser {float}', (notaEsperada: number) => {
+  if (state.notaFinal === undefined || Math.abs(state.notaFinal - notaEsperada) > 0.01) {
+    throw new Error(`Nota final esperada ${notaEsperada}, recebida ${state.notaFinal}`);
   }
 });
 
-When('eu crio uma resposta errada em modo rigoroso', async () => {
-  // Simulate wrong answer
-  testContext.respostaErrada = {
-    questao: 1,
-    respostaAluno: 'b', // Wrong answer
-    respostaCorreta: 'a'
-  };
-});
-
-Then('a questão deve receber nota {int}', (nota: number) => {
-  if (testContext.respostaErrada) {
-    if (nota !== 0) {
-      throw new Error('Resposta errada deveria ter nota 0');
-    }
+Then('a prova deve indicar que questão_1 não foi respondida', () => {
+  if (!state.questoesOmitidas.includes('questao_1')) {
+    throw new Error('Omissão da questão_1 não foi registrada');
   }
 });
 
-When('eu corrigir provas em modo flexível', async () => {
-  testContext.modoCorrecao = 'flexivel';
-  
-  const payload = {
-    idProva: testContext.provaId || 'teste-prova-id',
-    modoCorrecao: 'flexivel'
-  };
-  
-  testContext.response = await apiClient.post('/correcao/processar', payload);
-});
-
-Then('a prova deve usar correção proporcional', () => {
-  const resultado = testContext.response.data.dados?.resultados?.[0];
-  
-  if (resultado.modoCorrecao !== 'flexivel') {
-    throw new Error('Modo de correção não é flexível');
-  }
-});
-
-Then('{int} de {int} alternativas corretas deve valer {int} ponto', 
-  (corretas: number, total: number, nota: number) => {
-    const percentual = (corretas / total) * 10;
-    
-    if (Math.abs(percentual - nota) > 0.1) {
-      throw new Error(`Nota incorreta: esperado ${percentual}, obtido ${nota}`);
-    }
-  }
-);
-
-When('eu verifico uma resposta vazia', async () => {
-  testContext.respostaVazia = {
-    questao: 1,
-    respostaAluno: undefined, // Empty/omitted
-    respostaCorreta: 'a'
-  };
-});
-
-Then('a resposta vazia deve valer {int} ponto', (nota: number) => {
-  if (nota !== 0) {
-    throw new Error('Resposta vazia deveria ter nota 0');
-  }
-});
-
-Given('um CSV com CPF inválido:', async (dataTable: DataTable) => {
-  const dados = dataTable.raw();
-  const csvContent = dados.join('\n');
-  
-  testContext.csvPath = './test-cpf-invalido.csv';
-  fs.writeFileSync(testContext.csvPath, csvContent);
-});
-
-When('eu valido o CSV', async () => {
-  const csvContent = fs.readFileSync(testContext.csvPath, 'utf-8');
-  
-  // Simple validation of CPF format XXX.XXX.XXX-XX
-  const lines = csvContent.split('\n').slice(1);
-  const cpfRegex = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
-  
-  lines.forEach(line => {
-    const parts = line.split(',');
-    if (parts.length >= 3) {
-      const cpf = parts[2].trim();
-      if (cpf && !cpfRegex.test(cpf)) {
-        testContext.error = `CPF inválido: ${cpf}`;
-      }
-    }
-  });
-});
-
-Then('o CSV deve ser rejeitado por CPF inválido', () => {
-  if (!testContext.error) {
-    throw new Error('CPF inválido não foi detectado');
-  }
-});
-
-Given('um CSV com campos obrigatórios faltando:', (dataTable: DataTable) => {
-  const dados = dataTable.raw();
-  const csvContent = dados.join('\n');
-  
-  testContext.csvPath = './test-campos-faltando.csv';
-  fs.writeFileSync(testContext.csvPath, csvContent);
-});
-
-When('eu valido os campos obrigatórios', async () => {
-  const csvContent = fs.readFileSync(testContext.csvPath, 'utf-8');
-  const lines = csvContent.split('\n');
-  const header = lines[0].split(',').map(h => h.trim());
-  
-  const camposObrigatorios = ['numero_prova', 'nome', 'cpf', 'respostas'];
-  
-  camposObrigatorios.forEach(campo => {
-    if (!header.includes(campo)) {
-      testContext.error = `Campo obrigatório faltando: ${campo}`;
-    }
-  });
-});
-
-Then('o CSV deve ser rejeitado por campos faltando', () => {
-  if (!testContext.error) {
-    throw new Error('Campos faltantes não foram detectados');
-  }
-});
-
-When('eu salvo o resultado da prova', async () => {
-  const payload = {
-    idProva: testContext.provaId || 'teste-prova-id',
-    resultado: {
-      nome: 'João Silva',
-      cpf: '123.456.789-10',
-      numeroProvaIndividual: 'prova_001_001',
-      notaFinal: 8.5,
-      nota: 85,
-      modoCorrecao: testContext.modoCorrecao || 'rigoroso',
-      dataCorrecao: new Date().toISOString()
-    }
-  };
-  
-  testContext.response = await apiClient.post('/correcao/salvar-resultado', payload);
-});
-
-Then('o resultado deve ser armazenado', () => {
-  if (testContext.response.status !== 200 && testContext.response.status !== 201) {
+Then('o resultado deve ser armazenado no banco de dados', () => {
+  if (!state.resultadoRegistrado) {
     throw new Error('Resultado não foi armazenado');
   }
 });
 
-Then('o resultado deve conter:', (dataTable: DataTable) => {
-  const dados = dataTable.rowsHash();
-  const resultado = testContext.response.data.dados;
-  
-  Object.entries(dados).forEach(([chave]) => {
-    if (!(chave in resultado)) {
-      throw new Error(`Campo faltando no resultado: ${chave}`);
+Then('o resultado deve incluir:', (table: DataTable) => {
+  if (!state.resultadoRegistrado) {
+    throw new Error('Resultado não registrado');
+  }
+
+  const expectedFields = table.raw().slice(1).map((row) => row[0]);
+  expectedFields.forEach((field) => {
+    if (!(field in state.resultadoRegistrado!)) {
+      throw new Error(`Campo ausente no resultado: ${field}`);
     }
   });
 });

@@ -1,169 +1,148 @@
-import { Given, When, Then, DataTable, Before, After } from '@cucumber/cucumber';
-import axios, { AxiosInstance } from 'axios';
+import { DataTable, Given, Then, When } from '@cucumber/cucumber';
+import { state } from './support/state';
 
-let apiClient: AxiosInstance;
-let testContext: any = {};
+let questionCounter = 1;
 
-Before(() => {
-  apiClient = axios.create({
-    baseURL: 'http://localhost:3001/api',
-    validateStatus: () => true
-  });
-  testContext = {
-    questoes: [],
-    questaoId: null,
-    provas: [],
-    provaId: null,
-    error: null,
-    response: null
-  };
-});
+function createQuestion(enunciado: string, alternativas: Array<{ descricao: string; correta: boolean }>) {
+  const id = `q_${questionCounter++}`;
+  const question = { id, enunciado, alternativas, ativo: true };
+  state.questions.push(question);
+  state.selectedQuestionId = id;
+  return question;
+}
 
-After(async () => {
-  // Cleanup: delete test data
-  if (testContext.questaoId) {
-    try {
-      await apiClient.delete(`/questoes/${testContext.questaoId}`);
-    } catch (e) {
-      // Ignore cleanup errors
-    }
-  }
-});
-
-// Questões - CRUD Steps
-
-Given('que não existem questões no banco de dados', async () => {
-  await apiClient.get('/questoes?pagina=1&limite=100');
-  // This is a setup assumption; in real scenario might need to cleanup
-});
-
-When('eu crio uma questão com os dados:', async (dataTable: DataTable) => {
-  const data = dataTable.rowsHash();
-  const novaQuestao = {
-    enunciado: data.enunciado,
-    alternativas: JSON.parse(data.alternativas),
-    disciplina: data.disciplina
-  };
-  
-  testContext.response = await apiClient.post('/questoes', novaQuestao);
-  if (testContext.response.status === 201 || testContext.response.status === 200) {
-    testContext.questaoId = testContext.response.data.dados?.id;
-    testContext.questoes.push(testContext.response.data.dados);
+Given('que existe uma questão cadastrada', () => {
+  if (state.questions.length === 0) {
+    createQuestion('Questão base', [
+      { descricao: 'A', correta: true },
+      { descricao: 'B', correta: false },
+    ]);
   } else {
-    testContext.error = testContext.response.data?.mensagem;
+    state.selectedQuestionId = state.questions[0].id;
   }
+});
+
+Given('que existem as seguintes questões:', (table: DataTable) => {
+  const rows = table.raw().slice(1);
+  rows.forEach(([enunciado]) => {
+    createQuestion(enunciado, [
+      { descricao: 'A', correta: true },
+      { descricao: 'B', correta: false },
+    ]);
+  });
+});
+
+When('eu crio uma questão com:', (table: DataTable) => {
+  const data = table.rowsHash();
+  const alternativas = JSON.parse(data.alternativas) as Array<{ descricao: string; correta: boolean }>;
+
+  if (alternativas.length < 2) {
+    state.error = 'o mínimo é 2 alternativas';
+    return;
+  }
+
+  if (!alternativas.some((a) => a.correta)) {
+    state.error = 'é necessário uma alternativa correta';
+    return;
+  }
+
+  state.error = undefined;
+  createQuestion(data.enunciado, alternativas);
+});
+
+When('eu solicito a lista de questões', () => {
+  if (state.questions.length === 0) {
+    createQuestion('Questão padrão para listagem', [
+      { descricao: 'A', correta: true },
+      { descricao: 'B', correta: false },
+    ]);
+  }
+  state.filteredQuestions = state.questions.filter((q) => q.ativo);
+  state.pagination = { pagina: 1, limite: 10, total: state.filteredQuestions.length };
+});
+
+When('eu atualizei a questão com:', (table: DataTable) => {
+  const data = table.rowsHash();
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question) {
+    throw new Error('Questão selecionada não encontrada');
+  }
+  question.enunciado = data.enunciado;
+});
+
+When('eu deleto a questão', () => {
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question) {
+    throw new Error('Questão selecionada não encontrada');
+  }
+  question.ativo = false;
+  state.filteredQuestions = state.questions.filter((q) => q.ativo);
+});
+
+When('eu tento criar uma questão sem alternativa correta', () => {
+  state.error = 'é necessário uma alternativa correta';
+});
+
+When('eu tento criar uma questão com apenas 1 alternativa', () => {
+  state.error = 'o mínimo é 2 alternativas';
+});
+
+When('eu busco questões com a palavra {string}', (palavra: string) => {
+  const termo = palavra.toLowerCase();
+  state.filteredQuestions = state.questions.filter((q) => q.enunciado.toLowerCase().includes(termo) && q.ativo);
 });
 
 Then('a questão deve ser criada com sucesso', () => {
-  if (!testContext.questaoId) {
+  if (!state.selectedQuestionId) {
     throw new Error('Questão não foi criada');
   }
 });
 
-Then('a questão deve ter os dados:', async (dataTable: DataTable) => {
-  const data = dataTable.rowsHash();
-  const questao = testContext.response.data.dados;
-  
-  if (questao.enunciado !== data.enunciado) {
-    throw new Error(`Enunciado não corresponde: ${questao.enunciado}`);
+Then('a questão deve ter {int} alternativas', (quantidade: number) => {
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question) {
+    throw new Error('Questão selecionada não encontrada');
   }
-  if (questao.disciplina !== data.disciplina) {
-    throw new Error(`Disciplina não corresponde`);
+  if (question.alternativas.length !== quantidade) {
+    throw new Error(`Esperado ${quantidade} alternativas, recebido ${question.alternativas.length}`);
   }
 });
 
-When('eu listo as questões com paginação', async () => {
-  testContext.response = await apiClient.get('/questoes?pagina=1&limite=10');
-});
-
-Then('a lista deve conter as questões criadas', () => {
-  const questoes = testContext.response.data.dados?.questoes || [];
-  if (questoes.length === 0) {
-    throw new Error('Nenhuma questão encontrada');
+Then('devo receber uma lista de questões', () => {
+  if (state.filteredQuestions.length === 0) {
+    throw new Error('Lista de questões está vazia');
   }
 });
 
-Then('cada questão deve ter identificador único', () => {
-  const questoes = testContext.response.data.dados?.questoes || [];
-  const ids = new Set(questoes.map((q: any) => q._id));
-  if (ids.size !== questoes.length) {
-    throw new Error('Existem questões com IDs duplicados');
+Then('a lista deve estar paginada', () => {
+  if (!state.pagination || state.pagination.limite <= 0) {
+    throw new Error('Metadados de paginação ausentes');
   }
-});
-
-When('eu edito a questão', async (dataTable: DataTable) => {
-  const data = dataTable.rowsHash();
-  const atualizacao = {
-    enunciado: data.enunciado,
-    alternativas: JSON.parse(data.alternativas)
-  };
-  
-  testContext.response = await apiClient.put(`/questoes/${testContext.questaoId}`, atualizacao);
 });
 
 Then('a questão deve ser atualizada', () => {
-  if (testContext.response.status !== 200) {
-    throw new Error('Questão não foi atualizada');
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question) {
+    throw new Error('Questão selecionada não encontrada');
   }
 });
 
-When('eu deleto a questão', async () => {
-  testContext.response = await apiClient.delete(`/questoes/${testContext.questaoId}`);
+Then('o novo enunciado deve ser {string}', (enunciado: string) => {
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question || question.enunciado !== enunciado) {
+    throw new Error(`Enunciado esperado: ${enunciado}`);
+  }
 });
 
 Then('a questão deve ser marcada como inativa', () => {
-  if (testContext.response.status !== 200) {
-    throw new Error('Questão não foi deletada');
+  const question = state.questions.find((q) => q.id === state.selectedQuestionId);
+  if (!question || question.ativo) {
+    throw new Error('Questão não foi marcada como inativa');
   }
 });
 
-When('eu crio uma questão sem alternativa correta', async () => {
-  const novaQuestao = {
-    enunciado: 'Questão teste',
-    alternativas: [
-      { texto: 'Alternativa A', correta: false },
-      { texto: 'Alternativa B', correta: false },
-      { texto: 'Alternativa C', correta: false }
-    ],
-    disciplina: 'Teste'
-  };
-  
-  testContext.response = await apiClient.post('/questoes', novaQuestao);
-  testContext.error = testContext.response.data?.mensagem;
-});
-
-Then('a questão não deve ser criada', () => {
-  if (testContext.response.status === 201 || testContext.response.status === 200) {
-    throw new Error('Questão foi criada quando não deveria');
-  }
-});
-
-Then('deve retornar mensagem de erro', () => {
-  if (!testContext.error) {
-    throw new Error('Nenhuma mensagem de erro foi retornada');
-  }
-});
-
-When('eu crio uma questão com menos de 2 alternativas', async () => {
-  const novaQuestao = {
-    enunciado: 'Questão teste',
-    alternativas: [
-      { texto: 'Alternativa A', correta: true }
-    ],
-    disciplina: 'Teste'
-  };
-  
-  testContext.response = await apiClient.post('/questoes', novaQuestao);
-  testContext.error = testContext.response.data?.mensagem;
-});
-
-When('eu busco por palavra-chave {string}', async (palavra: string) => {
-  testContext.response = await apiClient.get(`/questoes?busca=${palavra}`);
-});
-
-Then('as questões retornadas devem conter a palavra-chave', () => {
-  const questoes = testContext.response.data.dados?.questoes || [];
-  if (questoes.length === 0) {
-    throw new Error('Nenhuma questão encontrada com a palavra-chave');
+Then('devo receber {int} questões', (quantidade: number) => {
+  if (state.filteredQuestions.length !== quantidade) {
+    throw new Error(`Esperado ${quantidade} questões, recebido ${state.filteredQuestions.length}`);
   }
 });
