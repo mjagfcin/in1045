@@ -27,13 +27,13 @@ export default function Home() {
           <div>Gerenciar Provas</div>
         </Link>
         
-        <a
-          href="#"
+        <Link
+          to="/relatorios"
           className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition"
         >
           <div className="text-5xl mb-4">📊</div>
           <div>Relatórios</div>
-        </a>
+        </Link>
       </div>
 
       <div className="mt-12 bg-blue-50 p-6 rounded-lg">
