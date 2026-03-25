@@ -1,4 +1,4 @@
-# language: pt-BR
+# language: pt
 Funcionalidade: Gerenciar Provas
   Como um professor
   Quero criar e gerenciar provas combinando questões

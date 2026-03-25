@@ -1,4 +1,4 @@
-# language: pt-BR
+# language: pt
 Funcionalidade: Gerar Relatórios de Notas
   Como um professor
   Quero gerar relatórios de notas por turma

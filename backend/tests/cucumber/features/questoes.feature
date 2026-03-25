@@ -1,4 +1,4 @@
-# language: pt-BR
+# language: pt
 Funcionalidade: Gerenciar Questões
   Como um professor
   Quero gerenciar questões de múltipla escolha

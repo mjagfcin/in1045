@@ -1,4 +1,4 @@
-# language: pt-BR
+# language: pt
 Funcionalidade: Corrigir Provas
   Como um professor
   Quero corrigir provas de alunos automaticamente

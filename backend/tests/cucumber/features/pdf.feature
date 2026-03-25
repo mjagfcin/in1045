@@ -1,4 +1,4 @@
-# language: pt-BR
+# language: pt
 Funcionalidade: Gerar PDFs de Provas
   Como um professor
   Quero gerar múltiplos PDFs individualizados de uma prova
